@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>หาดใหญ่สะอาด | Hat Yai Clean</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600&display=swap');
+        
+        body, html { margin: 0; padding: 0; font-family: 'Kanit', sans-serif; height: 100%; }
+        #map { height: 100%; width: 100%; z-index: 1; }
+
+        /* แผงควบคุมด้านล่าง (Bottom Sheet Style) */
+        .bottom-panel {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: white;
+            z-index: 1000;
+            padding: 20px;
+            border-radius: 25px 25px 0 0;
+            box-shadow: 0 -5px 20px rgba(0,0,0,0.1);
+            max-height: 40vh;
+            overflow-y: auto;
+        }
+
+        .header-section { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .header-section h2 { margin: 0; color: #28a745; font-size: 1.4em; }
+
+        .btn {
+            border: none;
+            padding: 12px;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+            font-family: 'Kanit', sans-serif;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        .btn-primary { background: #007bff; color: white; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-outline { background: #f8f9fa; border: 1px solid #ddd; }
+        .btn-outline.active { background: #28a745; color: white; border-color: #28a745; }
+
+        .filter-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-bottom: 15px; }
+        
+        .report-box { background: #fff5f5; padding: 15px; border-radius: 12px; border: 1px solid #feb2b2; }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <div class="bottom-panel">
+        <div class="header-section">
+            <h2>📍 หาดใหญ่สะอาด</h2>
+            <button onclick="toggleAdmin()" style="background:none; border:none; color:#999; cursor:pointer;">แอดมิน</button>
+        </div>
+
+        <button class="btn btn-primary" onclick="findMyLocation()">🔍 ระบุตำแหน่งปัจจุบันของฉัน</button>
+
+        <div class="filter-row">
+            <button class="btn btn-outline active" onclick="filterMap('ทั้งหมด', this)">ทั้งหมด</button>
+            <button class="btn btn-outline" onclick="filterMap('ทั่วไป', this)">ทั่วไป</button>
+            <button class="btn btn-outline" onclick="filterMap('รีไซเคิล', this)">รีไซเคิล</button>
+            <button class="btn btn-outline" onclick="filterMap('อันตราย', this)">อันตราย</button>
+        </div>
+
+        <div class="report-box">
+            <p style="margin-top:0; font-weight:600;">📢 แจ้งถังขยะเต็ม/ชำรุด</p>
+            <select id="issueType" class="btn btn-outline" style="text-align:left;">
+                <option value="ถังขยะเต็ม">ถังขยะเต็ม</option>
+                <option value="ถังขยะชำรุด">ถังขยะชำรุด</option>
+                <option value="จุดทิ้งขยะเถื่อน">จุดทิ้งขยะเถื่อน</option>
+            </select>
+            <button class="btn btn-danger" onclick="sendReport()">ส่งรายงานที่จุดที่คุณอยู่</button>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const SCRIPT_URL = "YOUR_APPS_SCRIPT_URL_HERE"; // นำ URL จาก Google Apps Script มาวางที่นี่
+        const map = L.map('map', { zoomControl: false }).setView([7.0104, 100.4747], 14);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        let markerLayer = L.layerGroup().addTo(map);
+        let rawData = [];
+
+        // ดึงข้อมูลจาก Google Sheets
+        async function loadData() {
+            try {
+                const res = await fetch(SCRIPT_URL);
+                rawData = await res.json();
+                renderMarkers('ทั้งหมด');
+            } catch (e) { console.error("Data error", e); }
+        }
+
+        function renderMarkers(type) {
+            markerLayer.clearLayers();
+            rawData.forEach(p => {
+                if (type === 'ทั้งหมด' || p.type === type) {
+                    const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`;
+                    L.marker([p.lat, p.lng]).addTo(markerLayer)
+                     .bindPopup(`<b>${p.name}</b><br>ประเภท: ${p.type}<br><a href="${navUrl}" target="_blank" style="color:green; font-weight:bold;">🚗 นำทางไปจุดนี้</a>`);
+                }
+            });
+        }
+
+        function filterMap(type, btn) {
+            document.querySelectorAll('.btn-outline').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderMarkers(type);
+        }
+
+        async function sendReport() {
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                const data = {
+                    lat: pos.coords.latitude,
+                    lng: pos.coords.longitude,
+                    issue: document.getElementById('issueType').value
+                };
+                // ส่งข้อมูลเข้า Google Sheets แบบ POST
+                await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify(data) });
+                alert("ส่งรายงานเรียบร้อย ขอบคุณครับ!");
+            }, () => alert("โปรดอนุญาต GPS"));
+        }
+
+        function findMyLocation() {
+            map.locate({setView: true, maxZoom: 16});
+        }
+
+        function toggleAdmin() {
+            window.open("YOUR_GOOGLE_SHEET_URL", "_blank");
+        }
+
+        loadData();
+    </script>
+</body>
+</html>

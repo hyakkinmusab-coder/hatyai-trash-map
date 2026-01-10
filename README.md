@@ -1,0 +1,1 @@
+# hatyai-trash-map

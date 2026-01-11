@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>หาดใหญ่สะอาด | Hat Yai Clean</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        body, html { margin: 0; padding: 0; font-family: 'Kanit', sans-serif; height: 100%; background: #f4f4f9; }
+        #map { height: 100%; width: 100%; z-index: 1; }
+        .bottom-panel { position: fixed; bottom: 0; left: 0; right: 0; background: white; z-index: 1000; padding: 25px; border-radius: 30px 30px 0 0; box-shadow: 0 -10px 25px rgba(0,0,0,0.15); max-height: 45vh; overflow-y: auto; }
+        .header-section { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .header-section h2 { margin: 0; color: #2d3436; font-size: 1.6em; font-weight: 600; }
+        .btn { border: none; padding: 14px; border-radius: 15px; font-weight: 600; cursor: pointer; transition: 0.3s; font-family: 'Kanit', sans-serif; width: 100%; margin-bottom: 12px; font-size: 1em; }
+        .btn-primary { background: #0984e3; color: white; box-shadow: 0 4px 15px rgba(9, 132, 227, 0.3); }
+        .btn-primary:active { transform: scale(0.98); }
+        .btn-danger { background: #d63031; color: white; box-shadow: 0 4px 15px rgba(214, 48, 49, 0.3); }
+        .btn-outline { background: #ffffff; border: 2px solid #dfe6e9; color: #636e72; }
+        .btn-outline.active { background: #00b894; color: white; border-color: #00b894; }
+        .filter-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 20px; }
+        .report-box { background: #fffaf0; padding: 20px; border-radius: 20px; border: 1px solid #ffeaa7; }
+        select.btn-outline { appearance: none; -webkit-appearance: none; padding-left: 15px; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="bottom-panel">
+        <div class="header-section">
+            <h2>🌍 หาดใหญ่สะอาด</h2>
+            <button onclick="toggleAdmin()" style="background:none; border:none; color:#b2bec3; cursor:pointer; font-size: 0.9em;">จัดการข้อมูล</button>
+        </div>
+        <button class="btn btn-primary" onclick="findMyLocation()">📍 ระบุตำแหน่งปัจจุบันของฉัน</button>
+        <div class="filter-row">
+            <button class="btn btn-outline active" onclick="filterMap('ทั้งหมด', this)">ทั้งหมด</button>
+            <button class="btn btn-outline" onclick="filterMap('ทั่วไป', this)">ทั่วไป</button>
+            <button class="btn btn-outline" onclick="filterMap('รีไซเคิล', this)">รีไซเคิล</button>
+            <button class="btn btn-outline" onclick="filterMap('อันตราย', this)">อันตราย</button>
+        </div>
+        <div class="report-box">
+            <p style="margin-top:0; font-weight:600; color: #d63031;">📢 แจ้งปัญหาขยะในจุดที่คุณอยู่</p>
+            <select id="issueType" class="btn btn-outline" style="text-align:left; margin-bottom: 15px;">
+                <option value="ถังขยะเต็ม">ถังขยะเต็ม</option>
+                <option value="ถังขยะชำรุด">ถังขยะชำรุด</option>
+                <option value="จุดทิ้งขยะเถื่อน">จุดทิ้งขยะเถื่อน</option>
+            </select>
+            <button class="btn btn-danger" id="reportBtn" onclick="sendReport()">ส่งรายงานเข้าสู่ระบบ</button>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // --- ใส่ลิงก์ของคุณตรงนี้ ---
+        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxVNMtLs4J48XXNQLcsEXBzeMzX9iSokW4N6-K6kW4KRhE6XXKlC_L4DMt37AKCbtY2EA/exec"; 
+        const SHEET_URL = "https://docs.google.com/spreadsheets/d/1K8iiW-yG929fjaDvFr_ZO6Vs8T6YrkJCDg3AjNdyx4g/edit?gid=1264498173#gid=1264498173";
+        // -----------------------
+
+        const map = L.map('map', { zoomControl: false }).setView([7.0104, 100.4747], 14);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        let markerLayer = L.layerGroup().addTo(map);
+        let userMarker; // สำหรับหมุดตำแหน่งผู้ใช้
+        let rawData = [];
+
+        async function loadData() {
+            if(SCRIPT_URL.includes("script.google.com")) {
+                try {
+                    const res = await fetch(SCRIPT_URL);
+                    rawData = await res.json();
+                    renderMarkers('ทั้งหมด');
+                } catch (e) { console.error("Data error", e); }
+            }
+        }
+
+        function renderMarkers(type) {
+            markerLayer.clearLayers();
+            rawData.forEach(p => {
+                if (type === 'ทั้งหมด' || p.type === type) {
+                    L.marker([p.lat, p.lng]).addTo(markerLayer)
+                     .bindPopup(`<b>${p.name}</b><br>ประเภท: ${p.type}`);
+                }
+            });
+        }
+
+        function filterMap(type, btn) {
+            document.querySelectorAll('.btn-outline').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderMarkers(type);
+        }
+
+        // ฟังก์ชันใหม่: ระบุตำแหน่งพร้อมปักหมุดแดง
+        function findMyLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(function(position) {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+
+                    if (userMarker) { map.removeLayer(userMarker); }
+
+                    // ปักหมุดแดงตรงที่ผู้ใช้อยู่
+                    userMarker = L.marker([lat, lng]).addTo(map)
+                        .bindPopup("<b>คุณอยู่ที่นี่</b><br>พร้อมแจ้งเหตุได้ทันที")
+                        .openPopup();
+
+                    map.setView([lat, lng], 17);
+                }, function() {
+                    alert("กรุณาเปิด GPS และอนุญาตให้เข้าถึงตำแหน่ง");
+                });
+            }
+        }
+
+        async function sendReport() {
+            const btn = document.getElementById('reportBtn');
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                btn.disabled = true; btn.innerText = "กำลังส่ง...";
+                const data = { 
+                    lat: pos.coords.latitude, 
+                    lng: pos.coords.longitude, 
+                    issue: document.getElementById('issueType').value 
+                };
+                try {
+                    await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify(data), mode: 'no-cors' });
+                    alert("ขอบคุณที่ช่วยดูแลเมือง! ส่งรายงานเรียบร้อยแล้ว");
+                } catch (e) { alert("เกิดข้อผิดพลาด: " + e); }
+                btn.disabled = false; btn.innerText = "ส่งรายงานเข้าสู่ระบบ";
+            }, () => alert("กรุณาเปิด GPS เพื่อส่งพิกัดที่ถูกต้อง"));
+        }
+
+        function toggleAdmin() { window.open(SHEET_URL, "_blank"); }
+        loadData();
+    </script>
+</body>
+</html>

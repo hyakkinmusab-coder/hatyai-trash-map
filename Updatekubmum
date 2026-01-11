@@ -51,7 +51,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         // --- ใส่ลิงก์ของคุณตรงนี้ ---
-        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbywYJYWejQDLj5NDUxHnLWtewGD90CAS8WDweRRwssneRIa98v2jXQaGdowr7lb7iJUMw/exec"; 
+        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzzADeh146Elr78oVyfJOrzQIG4v9sk9GbfwCUXSA26CMZJkXpo7LsRlDXpm88QeBk1gg/exec"; 
         const SHEET_URL = "https://docs.google.com/spreadsheets/d/1K8iiW-yG929fjaDvFr_ZO6Vs8T6YrkJCDg3AjNdyx4g/edit?gid=1264498173#gid=1264498173";
         // -----------------------
 

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>หาดใหญ่สะอาด - ระบบค้นหาพิกัดอัจฉริยะ</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        /* บังคับใช้ฟอนต์สารบรรณแบบเด็ดขาด */
+        body, html, button, select, input, div, span, b, p { 
+            font-family: 'Sarabun', sans-serif !important; 
+        }
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #f0f2f5; }
+        #map { height: 100%; width: 100%; z-index: 1; }
+        
+        /* UI พรีเมียม กระจกฝ้า */
+        .bottom-panel { 
+            position: fixed; bottom: 15px; left: 15px; right: 15px; 
+            background: rgba(255, 255, 255, 0.95); z-index: 1000; 
+            padding: 20px; border-radius: 20px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            max-height: 55vh; overflow-y: auto;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        .search-section { 
+            background: #1a73e8; padding: 15px; border-radius: 15px; 
+            margin-bottom: 15px; color: white;
+        }
+        .search-input { 
+            width: 100%; padding: 12px; border-radius: 10px; border: none; 
+            font-size: 1em; margin-top: 8px; outline: none; box-sizing: border-box;
+        }
+
+        .btn { border: none; padding: 14px; border-radius: 12px; font-weight: 700; cursor: pointer; width: 100%; margin-bottom: 10px; transition: 0.2s; }
+        .btn-gps { background: #34a853; color: white; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .btn-report { background: #ea4335; color: white; font-size: 1.1em; }
+
+        .report-form { background: #f8f9fa; padding: 15px; border-radius: 15px; border: 1px solid #ddd; }
+        label { font-weight: 700; color: #444; font-size: 0.9em; display: block; margin-bottom: 5px; }
+        select { background: white; border: 1px solid #ddd; padding: 10px; border-radius: 8px; width: 100%; margin-bottom: 12px; font-size: 1em; appearance: auto; }
+
+        .map-control { 
+            position: fixed; top: 15px; right: 15px; z-index: 1000; 
+            background: white; border: none; width: 50px; height: 50px; 
+            border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.15); 
+            cursor: pointer; font-size: 1.5em; display: flex; align-items: center; justify-content: center;
+        }
+    </style>
+</head>
+<body>
+
+    <button class="map-control" onclick="switchMap()" title="สลับโหมดดาวเทียม">🛰️</button>
+    <div id="map"></div>
+
+    <div class="bottom-panel">
+        <div class="search-section">
+            <label style="color: white; font-size: 1em;">🔍 ค้นหาสถานที่ หรือ ประเภทขยะ (พิมพ์ผิดก็หาเจอ):</label>
+            <input type="text" id="searchInput" class="search-input" placeholder="เช่น หมู่บ้าน, ซอย, ขวด, กระป๋อง..." onkeyup="filterData()">
+        </div>
+        
+        <button class="btn btn-gps" onclick="findMyLocation()">🎯 ระบุพิกัดตำแหน่งปัจจุบันของคุณ</button>
+
+        <div class="report-form">
+            <label>📝 รายงานขยะในจุดนี้:</label>
+            <select id="trashType">
+                <option value="ขยะปกติ/ทั่วไป">🗑️ ขยะปกติ / ทั่วไป</option>
+                <option value="รีไซเคิล (ขวด/กระป๋อง)">♻️ รีไซเคิล (ขวด/กระป๋อง)</option>
+                <option value="ขยะอันตราย">☢️ ขยะอันตราย</option>
+            </select>
+            
+            <select id="issueType">
+                <option value="ขยะล้นถัง">🔴 ขยะล้นถัง</option>
+                <option value="ถังขยะชำรุด">🟠 ถังขยะชำรุด</option>
+                <option value="พบจุดทิ้งเถื่อน">⚠️ พบจุดทิ้งขยะเถื่อน</option>
+            </select>
+            
+            <button class="btn btn-report" id="reportBtn" onclick="sendReport()">🚀 ส่งพิกัดแจ้งเจ้าหน้าที่</button>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // --- วาง URL ของคุณตรงนี้ ---
+        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbywYJYWejQDLj5NDUxHnLWtewGD90CAS8WDweRRwssneRIa98v2jXQaGdowr7lb7iJUMw/exec"; 
+
+        const streetMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
+        const satelliteMap = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+
+        const map = L.map('map', { zoomControl: false, layers: [streetMap] }).setView([7.0104, 100.4747], 14);
+        let isSatellite = false;
+        let userMarker;
+        let markerLayer = L.layerGroup().addTo(map);
+        let allPoints = [];
+
+        function switchMap() {
+            if (isSatellite) { map.removeLayer(satelliteMap); map.addLayer(streetMap); } 
+            else { map.removeLayer(streetMap); map.addLayer(satelliteMap); }
+            isSatellite = !isSatellite;
+        }
+
+        async function loadData() {
+            if(SCRIPT_URL.includes("วาง_WEB_APP")) return;
+            try {
+                const res = await fetch(SCRIPT_URL);
+                allPoints = await res.json();
+                renderMarkers(allPoints);
+            } catch (e) { console.error("Error:", e); }
+        }
+
+        function renderMarkers(data) {
+            markerLayer.clearLayers();
+            data.forEach(p => {
+                // ตรวจสอบว่ามีละติจูดและลองจิจูด (ข้อมูลห้ามว่างแค่ 2 ช่องนี้)
+                if (p.lat && p.lng) {
+                    const marker = L.marker([p.lat, p.lng]).addTo(markerLayer);
+                    // ป้องกันข้อมูลว่างในหน้า Pop-up
+                    const name = p.name || "จุดแจ้งเหตุ";
+                    const location = p.location || "ไม่ระบุสถานที่";
+                    const type = p.type || "ทั่วไป";
+                    const note = p.note ? `<br>📝 หมายเหตุ: ${p.note}` : "";
+
+                    marker.bindPopup(`
+                        <div style="font-family:Sarabun; font-size:14px;">
+                            <b style="color:#1a73e8;">${name}</b><br>
+                            📍 สถานที่: ${location}<br>
+                            ♻️ ประเภท: ${type}${note}
+                        </div>
+                    `);
+                }
+            });
+        }
+
+        function filterData() {
+            const term = document.getElementById('searchInput').value.toLowerCase().trim();
+            if (term === "") { renderMarkers(allPoints); return; }
+
+            const filtered = allPoints.filter(p => {
+                const textPool = `${p.name || ''} ${p.location || ''} ${p.type || ''} ${p.note || ''}`.toLowerCase();
+                if (textPool.includes(term)) return true;
+                const pattern = term.split('').join('.*');
+                return new RegExp(pattern).test(textPool);
+            });
+            renderMarkers(filtered);
+        }
+
+        function findMyLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(function(pos) {
+                    const lat = pos.coords.latitude;
+                    const lng = pos.coords.longitude;
+                    if (userMarker) { map.removeLayer(userMarker); }
+                    userMarker = L.marker([lat, lng]).addTo(map).bindPopup("<b>คุณอยู่ที่นี่</b>").openPopup();
+                    map.setView([lat, lng], 17);
+                }, () => alert("กรุณาเปิด GPS"));
+            }
+        }
+
+        async function sendReport() {
+            const btn = document.getElementById('reportBtn');
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                btn.disabled = true; btn.innerText = "กำลังส่ง...";
+                const data = { 
+                    lat: pos.coords.latitude, 
+                    lng: pos.coords.longitude, 
+                    trashType: document.getElementById('trashType').value,
+                    issue: document.getElementById('issueType').value 
+                };
+                try {
+                    await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify(data), mode: 'no-cors' });
+                    alert("✅ แจ้งเหตุเรียบร้อยแล้ว!");
+                    loadData(); 
+                } catch (e) { alert("ล้มเหลว"); }
+                btn.disabled = false; btn.innerText = "🚀 ส่งพิกัดแจ้งเจ้าหน้าที่";
+            });
+        }
+
+        loadData();
+    </script>
+</body>
+</html>

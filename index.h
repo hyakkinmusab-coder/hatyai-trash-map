@@ -149,12 +149,4 @@
                     await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify(data), mode: 'no-cors' });
                     alert("บันทึกข้อมูลเรียบร้อย ขอบคุณที่ช่วยดูแลเมืองครับ!");
                 } catch (e) { alert("ล้มเหลว: " + e); }
-                btn.disabled = false; btn.innerText = "🚀 ส่งรายงานเข้าสู่ระบบ";
-            }, () => alert("กรุณาเปิด GPS เพื่อส่งพิกัดที่แม่นยำ"));
-        }
-
-        function toggleAdmin() { window.open(SHEET_URL, "_blank"); }
-        loadData();
-    </script>
-</body>
-</html>
+                btn.disabled = false; btn.innerText = "🚀 ส่ง
